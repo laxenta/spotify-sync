@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    spotify_sync_lib::run()
+    spotify_sync_lib::run()  // This calls the run() function from lib.rs
 }
