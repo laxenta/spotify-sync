@@ -10,13 +10,8 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "windows": [
-      {
-        "title": "spotify-sync",
-        "width": 800,
-        "height": 600
-      }
-    ],
+    "windows": [],
+    "withGlobalTauri": true,
     "security": {
       "csp": null
     }

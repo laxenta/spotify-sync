@@ -3681,6 +3681,7 @@ dependencies = [
 name = "spotify-sync"
 version = "0.1.0"
 dependencies = [
+ "dirs",
  "dotenv",
  "reqwest",
  "serde",

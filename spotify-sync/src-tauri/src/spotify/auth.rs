@@ -1,78 +1,62 @@
-use serde::{Deserialize, Serialize};
-use dotenv::dotenv;
+use reqwest::Client;
 use std::env;
+use crate::spotify::types::TokenResponse;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct SpotifyAuth {
-    pub client_id: String,
-    pub client_secret: String,
-    pub redirect_uri: String,
-}
-
-//hold spotify tokens
-#[derive(Debug, Serialize, Deserialize)]
-pub struct TokenResponse {
     pub access_token: String,
-    pub token_type: String,
-    pub expires_in: i64,
     pub refresh_token: Option<String>,
-    pub scope: String,
 }
 
 impl SpotifyAuth {
-    pub fn new(client_id: String, client_secret: String, redirect_uri: String) -> Self {
-        Self {
-            client_id,
-            client_secret,
-            redirect_uri,
+    pub fn new() -> Self {
+        SpotifyAuth {
+            access_token: String::new(),
+            refresh_token: None,
         }
     }
 
-    pub fn get_authorize_url(&self) -> String {
-        let base_url = "https://accounts.spotify.com/authorize";
+    pub fn get_auth_url(panel: &str) -> Result<String, Box<dyn std::error::Error>> {
+        let client_id = env::var("SPOTIFY_CLIENT_ID")?;
+        let redirect_uri = env::var("SPOTIFY_REDIRECT_URI")?;
 
-        let params = vec![
-            ("client_id", self.client_id.as_str()),
-            ("response_type", "code"),
-            ("redirect_uri", self.redirect_uri.as_str()),
-            ("scope", "playlist-read-private playlist-read-collaborative user-library-read"),
-            ("state", "some_random_state_here"), //AAAAAA make it rand later
-        ];
-        self.build_url(base_url, &params)
+        let scopes = "user-library-read user-library-modify";
+        
+        let url = format!(
+            "https://accounts.spotify.com/authorize?\
+            client_id={}&\
+            response_type=code&\
+            redirect_uri={}&\
+            scope={}&\
+            state={}",
+            client_id, redirect_uri, scopes, panel
+        );
+
+        Ok(url)
     }
 
-    fn build_url(&self, base: &str, params: &[(&str, &str)]) -> String {
-        let mut url = base.to_string() + "?";
+    pub async fn exchange_code(&mut self, code: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let client_id = env::var("SPOTIFY_CLIENT_ID")?;
+        let client_secret = env::var("SPOTIFY_CLIENT_SECRET")?;
+        let redirect_uri = env::var("SPOTIFY_REDIRECT_URI")?;
 
-        for (i, (key, value)) in params.iter().enumerate() {
-            if i > 0 {
-                url.push('&');
-            }
-            url.push_str(&format!("{}={}", key, value));
-        }
-        url
+        let client = Client::new();
+        let response = client
+            .post("https://accounts.spotify.com/api/token")
+            .form(&[
+                ("grant_type", "authorization_code"),
+                ("code", code),
+                ("redirect_uri", &redirect_uri),
+                ("client_id", &client_id),
+                ("client_secret", &client_secret),
+            ])
+            .send()
+            .await?;
+
+        let token_response: TokenResponse = response.json().await?;
+        self.access_token = token_response.access_token;
+        self.refresh_token = token_response.refresh_token;
+
+        Ok(())
     }
-}
-
-// Tauri command to get the login URL - this will be callable from React
-#[tauri::command]
-pub fn get_spotify_login_url() -> Result<String, String> {
-    // Load environment variables from .env file
-    dotenv().ok();
-    
-    let client_id = env::var("SPOTIFY_CLIENT_ID")
-        .map_err(|_| "SPOTIFY_CLIENT_ID not found in .env file".to_string())?;
-        
-    let client_secret = env::var("SPOTIFY_CLIENT_SECRET")
-        .map_err(|_| "SPOTIFY_CLIENT_SECRET not found in .env file".to_string())?;
-        
-    let redirect_uri = env::var("SPOTIFY_REDIRECT_URI")
-        .map_err(|_| "SPOTIFY_REDIRECT_URI not found in .env file".to_string())?;
-
-    let auth = SpotifyAuth::new(client_id, client_secret, redirect_uri);
-    
-    let url = auth.get_authorize_url();
-    println!("Generated Spotify login URL: {}", url); // This will show in terminal
-    
-    Ok(url)
 }
